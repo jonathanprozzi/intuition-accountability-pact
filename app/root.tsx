@@ -35,10 +35,10 @@ export const meta: MetaFunction<typeof loader> = ({ data }) => {
   return [
     {
       title: data
-        ? 'Intuition App Template - Remix'
-        : 'Error | Intuition App Template - Remix',
+        ? 'Intuition Accountability Pact'
+        : 'Error | Intuition Accountability Pact',
     },
-    { name: 'description', content: `Start your Intuition journey.` },
+    { name: 'description', content: `Craft an Intuition Accountability Pact.` },
   ]
 }
 
@@ -96,7 +96,7 @@ export default function App() {
     )
 
     const { connectors } = getDefaultWallets({
-      appName: 'Intuition App Template - Remix',
+      appName: 'Intuition Accountability Pact',
       chains,
       projectId: ENV.WALLETCONNECT_PROJECT_ID!,
     })

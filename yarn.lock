@@ -518,6 +518,23 @@
     dids "^4.0.4"
     json-schema-typed "^8.0.1"
 
+"@conform-to/dom@0.9.0":
+  version "0.9.0"
+  resolved "https://registry.yarnpkg.com/@conform-to/dom/-/dom-0.9.0.tgz#2ad40c5b17426df37c5380a96305d5325d4a8753"
+  integrity sha512-kaYP7jKeWWnBY+M0+Rttj5atWm9Tt9Uyts49lU4hoz9p/X8v5GuGas6YOilovyE5/vJUsnuYzN97upxIvlYg4g==
+
+"@conform-to/react@^0.9.0":
+  version "0.9.0"
+  resolved "https://registry.yarnpkg.com/@conform-to/react/-/react-0.9.0.tgz#29ccaf24893be74000d46eee14913163be76f6ad"
+  integrity sha512-ZxfzK+L4b3Z9SPGCyo8GqLjfSFDp4upiwpjJHxDLPwMDVsF8EvkifSHyzUkjaiIny407qN9zbdtoItQCTaaZeg==
+  dependencies:
+    "@conform-to/dom" "0.9.0"
+
+"@conform-to/zod@^0.9.0":
+  version "0.9.0"
+  resolved "https://registry.yarnpkg.com/@conform-to/zod/-/zod-0.9.0.tgz#266abedb308c9319560fea83f437a6adcbae8956"
+  integrity sha512-Eq19/U6inDlCB1GNrvfTJBxyRVFesHVgkB5piWqLmhRYFHL8ooQGvmhVaOqeqqm+e+zNCjsIe3jip5ZW7uiBIw==
+
 "@didtools/cacao@^2.0.0", "@didtools/cacao@^2.1.0":
   version "2.1.0"
   resolved "https://registry.yarnpkg.com/@didtools/cacao/-/cacao-2.1.0.tgz#5ce7bbae0abf6cce0631b8e5df657052065b9d40"
