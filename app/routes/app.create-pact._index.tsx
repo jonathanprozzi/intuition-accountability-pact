@@ -1,3 +1,4 @@
+import react from 'react'
 import { conform, useForm } from '@conform-to/react'
 import { parse } from '@conform-to/zod'
 import type { ActionFunctionArgs, LoaderFunctionArgs } from '@remix-run/node'
@@ -18,7 +19,30 @@ import { requireAuthedUser } from '@/lib/services/auth.server'
 import { User } from 'types/user'
 import { Textarea } from '@/components/ui/textarea'
 
-const addressRegex = /^0x[a-fA-F0-9]{64}$/
+export async function loader({ request }: LoaderFunctionArgs) {
+  const user = (await requireAuthedUser(request)) as User
+  const { wallet } = user
+  return json({
+    wallet: wallet,
+  })
+}
+
+// test address: 0x04EA475026a0AB3e280F749b206fC6332E6939F1
+
+const addressRegex = /^0x[a-fA-F0-9]{40}$/
+const createDyamicValidationSchema = ({ wallet }: { wallet: string }) => {
+  return z.object({
+    accountabilityAddress: z
+      .string({ required_error: 'Accountability Address is required.' })
+      .regex(addressRegex, { message: 'Invalid Ethereum address format.' })
+      .refine((walletAddress) => walletAddress !== wallet, {
+        message: `Accountability Address can't be the same as your wallet address.`,
+      }),
+    pactDescription: z.string({
+      required_error: 'Pact Description is required.',
+    }),
+  })
+}
 
 const validationSchema = z.object({
   accountabilityAddress: z
@@ -28,28 +52,6 @@ const validationSchema = z.object({
     required_error: 'Pact Description is required.',
   }),
 })
-
-export async function loader({ request }: LoaderFunctionArgs) {
-  const user = (await requireAuthedUser(request)) as User
-  const { wallet } = user
-  return json({
-    wallet: wallet,
-  })
-}
-
-export async function action({ request }: ActionFunctionArgs) {
-  const formData = await request.formData()
-  const submission = parse(formData, { schema: validationSchema })
-
-  /**
-   * Send form submission  only when the user click on the submit button and no error found
-   */
-  if (!submission.value || submission.intent !== 'submit') {
-    return json(submission)
-  }
-
-  return redirect(`/?value=${JSON.stringify(submission.value)}`)
-}
 
 export default function CreatePactIndexRoute() {
   const { wallet } = useLoaderData<typeof loader>()
@@ -71,12 +73,32 @@ export default function CreatePactIndexRoute() {
   )
 }
 
+// @TODO: pass in the address in a hidden field instead of loading it in via the loader
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData()
+  const dynamicValidationSchema = createDyamicValidationSchema({
+    wallet: '0x25709998B542f1Be27D19Fa0B3A9A67302bc1b94',
+  })
+
+  console.log('submit action', formData)
+  const submission = parse(formData, { schema: dynamicValidationSchema })
+
+  if (!submission.value || submission.intent !== 'submit') {
+    return json(submission)
+  }
+
+  return redirect(`/?value=${JSON.stringify(submission.value)}`)
+}
+
 export function CreatePactForm() {
   const lastSubmission = useActionData<typeof action>()
+  const dynamicValidationSchema = createDyamicValidationSchema({
+    wallet: '0x25709998B542f1Be27D19Fa0B3A9A67302bc1b94',
+  })
   const [form, { accountabilityAddress, pactDescription }] = useForm({
     lastSubmission,
     onValidate({ formData }) {
-      return parse(formData, { schema: validationSchema })
+      return parse(formData, { schema: dynamicValidationSchema })
     },
     shouldValidate: 'onBlur',
   })
