@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { conform, useForm, validate, refine } from '@conform-to/react'
+import { conform, useForm, validate } from '@conform-to/react'
 import { parse } from '@conform-to/zod'
-import type { ActionFunctionArgs, LoaderFunctionArgs } from '@remix-run/node'
+import type {
+  ActionFunction,
+  ActionFunctionArgs,
+  LoaderFunctionArgs,
+} from '@remix-run/node'
 import { json, redirect } from '@remix-run/node'
 import {
   Form,
@@ -21,9 +25,9 @@ import { Label } from '@/components/ui/label'
 import IntuitionLogotype from '@/assets/intuition-logotype'
 import { AccountButton } from '@/components/account-button'
 import {
-  useAccount,
-  useSendTransaction,
   usePrepareSendTransaction,
+  useSendTransaction,
+  useWaitForTransaction,
 } from 'wagmi'
 import Header from '@/components/header'
 import { requireAuthedUser } from '@/lib/services/auth.server'
@@ -31,6 +35,7 @@ import { User } from 'types/user'
 import { Textarea } from '@/components/ui/textarea'
 
 import { parseEther } from 'viem'
+import { sendTransaction } from 'viem/actions'
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = (await requireAuthedUser(request)) as User
@@ -44,25 +49,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 const addressRegex = /^0x[a-fA-F0-9]{40}$/
 
-// function createValidationSchema(
-//   intent: string,
-//   options?: {
-//     isValidTxHash?: () => Promise<string>
-//   },
-// ) {
-//   return z.object({
-//     accountabilityAddress: z
-//       .string({ required_error: 'Accountability Address is required.' })
-//       .regex(addressRegex, { message: 'Invalid Ethereum address format.' }),
-//     pactDescription: z.string({
-//       required_error: 'Pact Description is required.',
-//     }),
-//     txHash: z
-//       .string({ required_error: 'Accountability Address is required.' })
-//       .regex(addressRegex, { message: 'Invalid Ethereum address format.' }),
-//   })
-// }
-
 const validationSchema = z.object({
   userAddress: z
     .string({ required_error: 'Accountability Address is required.' })
@@ -74,6 +60,21 @@ const validationSchema = z.object({
     required_error: 'Pact Description is required.',
   }),
 })
+
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData()
+  const submission = parse(formData, { schema: validationSchema })
+
+  /**
+   * Signup only when the user click on the submit button and no error found
+   */
+  if (!submission.value || submission.intent !== 'submit') {
+    // Always sends the submission state back to client until the user is signed up
+    return json(submission)
+  }
+
+  return redirect(`/?value=${JSON.stringify(submission.value)}`)
+}
 
 export default function CreatePactIndexRoute() {
   const { wallet } = useLoaderData<typeof loader>()
@@ -98,14 +99,26 @@ export default function CreatePactIndexRoute() {
 
 export function CreatePactForm() {
   const { wallet } = useLoaderData<typeof loader>()
-  const buttonRef = useRef<HTMLButtonElement>(null)
+  const fetcher = useFetcher<typeof action>()
+
+  const [txHash, setTxHash] = useState<`0x${string}` | null>(null)
+  const [isTxLoading, setIsTxLoading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const { config } = usePrepareSendTransaction({
     to: '0x04EA475026a0AB3e280F749b206fC6332E6939F1',
-    value: parseEther('0.0001'),
+    value: parseEther('0.00001'),
   })
-  const { data, status, isLoading, isSuccess, sendTransaction } =
-    useSendTransaction(config)
+  const { data, sendTransaction } = useSendTransaction(config)
+
+  const { isLoading, isSuccess } = useWaitForTransaction({ hash: data?.hash })
+
+  useEffect(() => {
+    if (!isLoading && isSuccess && data?.hash) {
+      setTxHash(data.hash)
+      setIsSubmitting(false) // Reset submitting state
+    }
+  }, [isLoading, isSuccess, data?.hash])
 
   const [form, { accountabilityAddress, pactDescription, userAddress }] =
     useForm({
@@ -116,16 +129,38 @@ export function CreatePactForm() {
       shouldValidate: 'onBlur',
       onSubmit(event, { submission }) {
         event.preventDefault()
-        if (submission.intent) {
-          console.log('Creating pact with transaction:', submission.payload)
+        if (isSubmitting) {
+          console.log('Already submitting')
+          return
+        }
+        if (submission.intent && txHash === null) {
+          // add in the client side tx, and get the txHash
+          setIsSubmitting(true)
+          console.log('Creating pact:', submission.payload)
+          sendTransaction?.()
         }
       },
     })
 
+  useEffect(() => {
+    if (txHash && !isSubmitting) {
+      const formData = new FormData()
+      formData.append('userAddress', wallet)
+      formData.append('txHash', txHash)
+
+      for (const value of formData.values()) {
+        console.log(value)
+      }
+      // Submit the form data along with the transaction hash
+      // You can use fetcher or a traditional form submission here
+      fetcher.submit(formData, { method: 'post' })
+    }
+  }, [txHash, isSubmitting])
+
   return (
     <Card className="w-full pb-8 pt-4">
       <div className="space-y-4">
-        <form {...form.props} className=" flex flex-col gap-4 p-6">
+        <fetcher.Form {...form.props} className="flex flex-col gap-4 p-6">
           <Input
             {...conform.input(userAddress)}
             type="hidden"
@@ -157,9 +192,10 @@ export function CreatePactForm() {
             type="submit"
             value="create-pact-with-transaction"
           >
-            Create Pact
+            {isLoading ? 'Creating Pact' : 'Create Pact'}
           </Button>
-        </form>
+        </fetcher.Form>
+        <p>txHash: {data?.hash}</p>
       </div>
     </Card>
   )
