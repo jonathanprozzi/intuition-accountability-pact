@@ -1,20 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
-import { conform, useForm, validate } from '@conform-to/react'
+import { conform, useForm } from '@conform-to/react'
 import { parse } from '@conform-to/zod'
-import type {
-  ActionFunction,
-  ActionFunctionArgs,
-  LoaderFunctionArgs,
-} from '@remix-run/node'
+import type { ActionFunctionArgs, LoaderFunctionArgs } from '@remix-run/node'
 import { json, redirect } from '@remix-run/node'
-import {
-  Form,
-  Link,
-  useActionData,
-  useFetcher,
-  useLoaderData,
-  useSubmit,
-} from '@remix-run/react'
+import { useFetcher, useLoaderData } from '@remix-run/react'
 import { custom, z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -22,28 +10,18 @@ import { Copy } from '@/components/ui/copy'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-import IntuitionLogotype from '@/assets/intuition-logotype'
-import { AccountButton } from '@/components/account-button'
-import {
-  usePrepareSendTransaction,
-  useSendTransaction,
-  useTransaction,
-  useWaitForTransaction,
-} from 'wagmi'
 import {
   sendTransaction,
   prepareSendTransaction,
   waitForTransaction,
 } from '@wagmi/core'
 import Header from '@/components/header'
-import { login, requireAuthedUser } from '@/lib/services/auth.server'
+import { requireAuthedUser } from '@/lib/services/auth.server'
 import { User } from 'types/user'
 import { Textarea } from '@/components/ui/textarea'
 
 import { parseEther } from 'viem'
 import useClientTransaction from '@/lib/utils/useClientTransaction'
-import { formAction } from '@/lib/services/form.server'
-import { makeDomainFunction } from 'domain-functions'
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = (await requireAuthedUser(request)) as User
@@ -61,12 +39,12 @@ const validationSchema = z.object({
   userAddress: z
     .string({ required_error: 'Accountability Address is required.' })
     .regex(addressRegex, { message: 'Invalid Ethereum address format.' }),
-  // accountabilityAddress: z
-  //   .string({ required_error: 'Accountability Address is required.' })
-  //   .regex(addressRegex, { message: 'Invalid Ethereum address format.' }),
-  // pactDescription: z.string({
-  //   required_error: 'Pact Description is required.',
-  // }),
+  accountabilityAddress: z
+    .string({ required_error: 'Accountability Address is required.' })
+    .regex(addressRegex, { message: 'Invalid Ethereum address format.' }),
+  pactDescription: z.string({
+    required_error: 'Pact Description is required.',
+  }),
 })
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -81,23 +59,6 @@ export async function action({ request }: ActionFunctionArgs) {
     `/app/create-pact?value=${JSON.stringify(submission.payload)}`,
   )
 }
-
-// const mutation = makeDomainFunction(validationSchema)(async (values) => {
-//   return values
-// })
-
-// export const action = async ({ request }: ActionFunctionArgs) => {
-//   const resp = await formAction({
-//     request,
-//     schema: validationSchema,
-//     mutation,
-//   })
-//   if (resp.ok) {
-//     // await login(request)
-//     console.log('resp', resp)
-//   }
-//   return null
-// }
 
 export default function CreatePactIndexRoute() {
   const { wallet } = useLoaderData<typeof loader>()
@@ -130,75 +91,52 @@ export function CreatePactForm() {
   } = useClientTransaction()
   const fetcher = useFetcher()
 
-  // const { config } = usePrepareSendTransaction({
-  //   to: '0x04EA475026a0AB3e280F749b206fC6332E6939F1',
-  //   value: parseEther('0.000001'),
-  // })
-  // const { data: transactionData, sendTransaction } = useSendTransaction(config)
-  // const { isLoading, isSuccess } = useWaitForTransaction({
-  //   hash: transactionData?.hash,
-  // })
+  const [form, { userAddress, accountabilityAddress, pactDescription }] =
+    useForm({
+      onValidate({ formData }) {
+        return parse(formData, { schema: validationSchema })
+      },
 
-  // useEffect(() => {
-  //   if (isSuccess && transactionData?.hash) {
-  //     console.log('Transaction successful:', transactionData.hash)
-  //     // Create a new FormData instance and append the txHash
-  //     const formData = new FormData()
-
-  //     formData.append('txHash', transactionData.hash)
-  //     // Use the fetcher to submit the formData to your action
-  //     fetcher.submit(formData, {
-  //       method: 'post',
-  //     })
-  //   }
-  // }, [transactionData, isSuccess])
-
-  const [form, { userAddress }] = useForm({
-    onValidate({ formData }) {
-      return parse(formData, { schema: validationSchema })
-    },
-
-    shouldValidate: 'onBlur',
-    onSubmit: async (event, { submission }) => {
-      event.preventDefault()
-      console.log('submission', submission)
-      try {
-        const formElement = event.target as HTMLFormElement // Cast the event target to HTMLFormElement
-        const config = await prepareSendTransaction({
-          to: '0x04EA475026a0AB3e280F749b206fC6332E6939F1',
-          value: parseEther('0.000001'),
-        })
-        const { hash } = await sendTransaction(config)
-
-        if (hash) {
-          const { transactionHash, status } = await waitForTransaction({
-            hash: hash,
+      shouldValidate: 'onBlur',
+      onSubmit: async (event, { submission }) => {
+        event.preventDefault()
+        console.log('submission', submission)
+        try {
+          const formElement = event.target as HTMLFormElement // Cast the event target to HTMLFormElement
+          const config = await prepareSendTransaction({
+            to: '0x04EA475026a0AB3e280F749b206fC6332E6939F1',
+            value: parseEther('0.000001'),
           })
+          const { hash } = await sendTransaction(config)
 
-          if (status === 'success') {
-            console.log('tx hash', transactionHash)
-            const formData = new FormData(formElement) // Use the form element reference here
-            formData.append('txHash', transactionHash)
-            for (const [key, value] of formData.entries()) {
-              console.log(key, value)
-            }
-            // Perform the final form submission with the updated formData
-            // For example:
-            fetcher.submit(formData, {
-              method: 'post',
+          if (hash) {
+            const { transactionHash, status } = await waitForTransaction({
+              hash: hash,
             })
-          }
-        }
-      } catch (error) {
-        console.error(
-          'An error occurred during transaction or form handling:',
-          error,
-        )
 
-        // Handle the error appropriately
-      }
-    },
-  })
+            if (status === 'success') {
+              const formData = new FormData(formElement) // Use the form element reference here
+              formData.append('txHash', transactionHash)
+              for (const [key, value] of formData.entries()) {
+                console.log(key, value)
+              }
+              // Perform the final form submission with the updated formData
+              // For example:
+              fetcher.submit(formData, {
+                method: 'post',
+              })
+            }
+          }
+        } catch (error) {
+          console.error(
+            'An error occurred during transaction or form handling:',
+            error,
+          )
+
+          // Handle the error appropriately
+        }
+      },
+    })
 
   return (
     <Card className="w-full pb-8 pt-4">
@@ -214,7 +152,7 @@ export function CreatePactForm() {
             name="userAddress"
             value={wallet}
           />
-          {/* <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2">
             <Label className="m-x-auto text-sm text-foreground">
               Accountability Address
             </Label>
@@ -231,7 +169,7 @@ export function CreatePactForm() {
             <span className="flex items-center text-xs font-medium tracking-wide text-red-500">
               {pactDescription.error}
             </span>
-          </div> */}
+          </div>
           <Button variant="outline" size="sm" className="block w-full">
             {isTransactionLoading ? 'Creating Pact' : 'Create Pact'}
           </Button>
