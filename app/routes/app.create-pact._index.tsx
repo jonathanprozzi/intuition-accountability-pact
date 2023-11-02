@@ -1,4 +1,4 @@
-import react, { useRef } from 'react'
+import { useRef } from 'react'
 import { conform, useForm } from '@conform-to/react'
 import { parse } from '@conform-to/zod'
 import type { ActionFunctionArgs, LoaderFunctionArgs } from '@remix-run/node'
@@ -69,8 +69,7 @@ export default function CreatePactIndexRoute() {
 // @TODO: pass in the address in a hidden field instead of loading it in via the loader
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData()
-  console.log('submit action calling')
-  console.log('submit action', formData)
+
   const submission = parse(formData, { schema: validationSchema })
 
   if (!submission.value || submission.intent !== 'submit') {
@@ -85,7 +84,7 @@ const asyncConsoleLog = (value: string): Promise<void> => {
     setTimeout(() => {
       console.log(value)
       resolve()
-    }, 1000) // waits 1 second before logging and resolving the promise
+    }, 500)
   })
 }
 
@@ -94,7 +93,7 @@ const createPactSplit = async ({
 }: {
   accountabilityAddress: FormDataEntryValue | null | string
 }) => {
-  await asyncConsoleLog(
+  return await asyncConsoleLog(
     `in createPactSplit: accountabilityAddress: ${accountabilityAddress}`,
   )
 }
@@ -102,6 +101,8 @@ const createPactSplit = async ({
 export function CreatePactForm() {
   const lastSubmission = useActionData<typeof action>()
   const formRef = useRef<HTMLFormElement>(null)
+  const submit = useSubmit()
+
   const [form, { accountabilityAddress, pactDescription }] = useForm({
     lastSubmission,
     onValidate({ formData }) {
@@ -110,20 +111,24 @@ export function CreatePactForm() {
     shouldValidate: 'onBlur',
   })
 
-  const createPactSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    const submit = useSubmit()
-    event.preventDefault()
-    const form = event.target as HTMLFormElement
-    const formData = new FormData(form)
-    const accountabilityAddress = formData.get('accountabilityAddress')
-    const pactDescription = formData.get('pactDescription')
+  const createPactPreSubmit = async (formData: FormData) => {
+    const accountabilityAddressValue = formData.get('accountabilityAddress')
+    const pactDescriptionValue = formData.get('pactDescription')
     console.log(
       'in createPactSubmit: accountabilityAddress',
       accountabilityAddress,
     )
-    // await createPactSplit({ accountabilityAddress })
-    // formRef.current?.requestSubmit() // This will invoke the Remix action
-    submit(event.currentTarget, { replace: true })
+    await asyncConsoleLog(
+      `Accountability Address: ${accountabilityAddressValue}`,
+    )
+    await asyncConsoleLog(`Pact Description: ${pactDescriptionValue}`)
+    await asyncConsoleLog('Client-side logic before form submission')
+  }
+
+  const createPactSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    const formData = new FormData(event.currentTarget)
+    await createPactPreSubmit(formData)
+    event.currentTarget.submit()
   }
 
   return (
@@ -132,7 +137,6 @@ export function CreatePactForm() {
         <Form
           method="post"
           {...form.props}
-          ref={formRef}
           onSubmit={createPactSubmit}
           className=" flex flex-col gap-4 p-6"
         >
