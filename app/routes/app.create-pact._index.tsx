@@ -22,6 +22,7 @@ import { Textarea } from '@/components/ui/textarea'
 
 import { parseEther } from 'viem'
 import useClientTransaction from '@/lib/utils/useClientTransaction'
+import { SplitsClient } from '@0xsplits/splits-sdk'
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = (await requireAuthedUser(request)) as User
@@ -32,6 +33,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 // test address: 0x04EA475026a0AB3e280F749b206fC6332E6939F1
+// test pact address: 0x21bEf3c7a5a8E0484c38D8cCBb50E012a26c8537
 
 const addressRegex = /^0x[a-fA-F0-9]{40}$/
 
@@ -39,8 +41,11 @@ const validationSchema = z.object({
   userAddress: z
     .string({ required_error: 'Accountability Address is required.' })
     .regex(addressRegex, { message: 'Invalid Ethereum address format.' }),
-  accountabilityAddress: z
-    .string({ required_error: 'Accountability Address is required.' })
+  // txHash: z
+  //   .string({ required_error: 'Accountability Address is required.' })
+  //   .regex(addressRegex, { message: 'Invalid tx hash address format.' }),
+  pactAddress: z
+    .string({ required_error: 'Pact Address is required.' })
     .regex(addressRegex, { message: 'Invalid Ethereum address format.' }),
   pactDescription: z.string({
     required_error: 'Pact Description is required.',
@@ -54,7 +59,7 @@ export async function action({ request }: ActionFunctionArgs) {
   if (!submission.value || submission.intent !== 'submit') {
     return json(submission)
   }
-  console.log('submission values', JSON.stringify(submission.payload))
+  console.log('submission values', JSON.stringify(submission.payload)) // server side log, includes the txHash
   return redirect(
     `/app/create-pact?value=${JSON.stringify(submission.payload)}`,
   )
@@ -91,61 +96,53 @@ export function CreatePactForm() {
   } = useClientTransaction()
   const fetcher = useFetcher()
 
-  const [form, { userAddress, accountabilityAddress, pactDescription }] =
-    useForm({
-      onValidate({ formData }) {
-        return parse(formData, { schema: validationSchema })
-      },
+  const [form, { userAddress, pactAddress, pactDescription }] = useForm({
+    onValidate({ formData }) {
+      return parse(formData, { schema: validationSchema })
+    },
 
-      shouldValidate: 'onBlur',
-      onSubmit: async (event, { submission }) => {
-        event.preventDefault()
-        console.log('submission', submission)
-        try {
-          const formElement = event.target as HTMLFormElement // Cast the event target to HTMLFormElement
-          const config = await prepareSendTransaction({
-            to: '0x04EA475026a0AB3e280F749b206fC6332E6939F1',
-            value: parseEther('0.000001'),
+    shouldValidate: 'onBlur',
+    onSubmit: async (event, { submission }) => {
+      event.preventDefault()
+
+      try {
+        const formElement = event.target as HTMLFormElement // Cast the event target to HTMLFormElement
+        const pactAddressValue = formElement.pactAddress.value
+
+        const config = await prepareSendTransaction({
+          to: pactAddressValue,
+          value: parseEther('0.001'),
+        })
+        const { hash } = await sendTransaction(config)
+
+        if (hash) {
+          const { transactionHash, status } = await waitForTransaction({
+            hash: hash,
           })
-          const { hash } = await sendTransaction(config)
 
-          if (hash) {
-            const { transactionHash, status } = await waitForTransaction({
-              hash: hash,
+          if (status === 'success') {
+            const formData = new FormData(formElement) // Use the form element reference here
+            formData.append('txHash', transactionHash)
+            fetcher.submit(formData, {
+              method: 'post',
             })
-
-            if (status === 'success') {
-              const formData = new FormData(formElement) // Use the form element reference here
-              formData.append('txHash', transactionHash)
-              for (const [key, value] of formData.entries()) {
-                console.log(key, value)
-              }
-              // Perform the final form submission with the updated formData
-              // For example:
-              fetcher.submit(formData, {
-                method: 'post',
-              })
-            }
           }
-        } catch (error) {
-          console.error(
-            'An error occurred during transaction or form handling:',
-            error,
-          )
-
-          // Handle the error appropriately
         }
-      },
-    })
+      } catch (error) {
+        console.error(
+          'An error occurred during transaction or form handling:',
+          error,
+        )
+
+        // Handle the error appropriately
+      }
+    },
+  })
 
   return (
     <Card className="w-full pb-8 pt-4">
       <div className="space-y-4">
-        <fetcher.Form
-          {...form.props}
-          // onSubmit={handleSubmit}
-          className="flex flex-col gap-4 p-6"
-        >
+        <fetcher.Form {...form.props} className="flex flex-col gap-4 p-6">
           <Input
             {...conform.input(userAddress)}
             type="hidden"
@@ -154,11 +151,11 @@ export function CreatePactForm() {
           />
           <div className="flex flex-col gap-2">
             <Label className="m-x-auto text-sm text-foreground">
-              Accountability Address
+              Pact Address
             </Label>
-            <Input {...conform.input(accountabilityAddress)} />
+            <Input {...conform.input(pactAddress)} />
             <span className="flex items-center text-xs font-medium tracking-wide text-red-500">
-              {accountabilityAddress.error}
+              {pactAddress.error}
             </span>
           </div>
           <div className="w-100 flex flex-col flex-wrap gap-2">
