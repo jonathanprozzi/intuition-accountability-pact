@@ -53,6 +53,12 @@ const validationSchema = z.object({
   pactDescription: z.string({
     required_error: 'Pact Description is required.',
   }),
+  pactAccountabilityPercentage: z
+    .number({
+      required_error: 'Pact Accountability Percentage is required.',
+    })
+    .min(10, { message: 'Percentage should be greater than or equal to 10' })
+    .max(50, { message: 'Percentage should be less than or equal to 50' }),
 })
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -102,7 +108,10 @@ export function CreatePactForm() {
 
   const publicClient = usePublicClient()
 
-  const [form, { userAddress, pactAddress, pactDescription }] = useForm({
+  const [
+    form,
+    { userAddress, pactAddress, pactDescription, pactAccountabilityPercentage },
+  ] = useForm({
     onValidate({ formData }) {
       return parse(formData, { schema: validationSchema })
     },
@@ -112,8 +121,27 @@ export function CreatePactForm() {
       event.preventDefault()
 
       try {
-        const formElement = event.target as HTMLFormElement // Cast the event target to HTMLFormElement
+        const formElement = event.target as HTMLFormElement
         const pactAddressValue = formElement.pactAddress.value
+
+        const pactAccountabilityPercentageValue = parseFloat(
+          formElement.pactAccountabilityPercentage.value,
+        )
+
+        // Check if the values are numbers
+        if (isNaN(pactAccountabilityPercentageValue)) {
+          throw new Error('Invalid input: Please enter numeric values.')
+        }
+
+        const userValueWithDecimal = parseFloat(
+          pactAccountabilityPercentageValue.toFixed(1),
+        )
+        const calculatedValueWithDecimal = parseFloat(
+          (100.0 - pactAccountabilityPercentageValue).toFixed(1), // Ensure this is also a number
+        )
+
+        console.log('userValueWithDecimal', userValueWithDecimal)
+        console.log('calculatedValueWithDecimal', calculatedValueWithDecimal)
 
         if (!walletClientLoading && walletClientData) {
           console.log('wallet client', walletClientData)
@@ -127,11 +155,11 @@ export function CreatePactForm() {
             recipients: [
               {
                 address: wallet,
-                percentAllocation: 53.0,
+                percentAllocation: userValueWithDecimal,
               },
               {
                 address: pactAddressValue,
-                percentAllocation: 47.0,
+                percentAllocation: calculatedValueWithDecimal,
               },
             ],
             distributorFeePercent: 0.0,
@@ -188,6 +216,15 @@ export function CreatePactForm() {
             <Textarea {...conform.input(pactDescription)} />
             <span className="flex items-center text-xs font-medium tracking-wide text-red-500">
               {pactDescription.error}
+            </span>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label className="m-x-auto text-sm text-foreground">
+              Pact Accountability Percentage
+            </Label>
+            <Input {...conform.input(pactAccountabilityPercentage)} />
+            <span className="flex items-center text-xs font-medium tracking-wide text-red-500">
+              {pactAccountabilityPercentage.error}
             </span>
           </div>
           <Button variant="outline" size="sm" className="block w-full">
