@@ -9,6 +9,7 @@ import {
   useNavigation,
   Form,
   useActionData,
+  Link,
 } from '@remix-run/react'
 import { custom, isValid, z } from 'zod'
 import { Button } from '@/components/ui/button'
@@ -176,18 +177,6 @@ export default function CreatePactIndexRoute() {
     console.log('Session wallet', wallet)
   }
 
-  // const fetcher = useFetcher<{
-  //   txHash?: string
-  //   pactAddress?: string
-  //   userAddress?: string
-  // } | null>()
-
-  useEffect(() => {
-    if (value !== null && value?.txHash) {
-      dispatch({ type: 'TRANSACTION_COMPLETE', txHash: value?.txHash })
-    }
-  }, [value, state])
-
   return (
     <main className="flex min-h-screen flex-col items-center ">
       <Header />
@@ -202,6 +191,9 @@ export default function CreatePactIndexRoute() {
                 {JSON.stringify(value, null, 2)}
               </pre>
             </div>
+            <Button variant="secondary" className="text-success-500" asChild>
+              <Link to="/app/create-pact">Cast a new Pact 🪄</Link>
+            </Button>
           </>
         ) : (
           <>
@@ -209,22 +201,22 @@ export default function CreatePactIndexRoute() {
               Create an Accountability Pact
             </p>
             <span className="pb-3 text-success-500">{wallet}</span>
+            <p>State: {state.status}</p>
+            {state.status === 'idle' && (
+              <p>Enter the information to create accountability pact!</p>
+            )}
+            {state.status === 'signing-wallet' && (
+              <p>Sign the transaction in your wallet!</p>
+            )}
+            {state.status === 'transaction-complete' && (
+              <p>tx Complete! {state.txHash}</p>
+            )}
+            {state.status === 'sending-txHash' && (
+              <p>Sending txHash! {state.txHash}</p>
+            )}
+            <CreatePactForm state={state} dispatch={dispatch} />
           </>
         )}
-        <p>State: {state.status}</p>
-        {state.status === 'idle' && (
-          <p>Enter the information to create accountability pact!</p>
-        )}
-        {state.status === 'signing-wallet' && (
-          <p>Sign the transaction in your wallet!</p>
-        )}
-        {state.status === 'transaction-complete' && (
-          <p>tx Complete! {state.txHash}</p>
-        )}
-        {state.status === 'sending-txHash' && (
-          <p>Sending txHash! {state.txHash}</p>
-        )}
-        <CreatePactForm state={state} dispatch={dispatch} />
       </div>
     </main>
   )
