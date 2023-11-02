@@ -74,6 +74,11 @@ export async function logout(request: Request) {
   await authenticator.logout(request, { redirectTo: '/login' })
 }
 
+export async function pact(request: Request) {
+  console.log('request received in api route', request)
+  await redirect('/app')
+}
+
 export async function requireAuthedUser(request: Request) {
   const user = await authenticator.isAuthenticated(request)
   if (!user) {

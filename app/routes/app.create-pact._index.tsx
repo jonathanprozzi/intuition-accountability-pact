@@ -23,24 +23,23 @@ import {
 import { usePublicClient, useWalletClient } from 'wagmi'
 import { getWalletClient, getPublicClient } from '@wagmi/core'
 import Header from '@/components/header'
-import { requireAuthedUser } from '@/lib/services/auth.server'
+import { pact, requireAuthedUser } from '@/lib/services/auth.server'
 import { User } from 'types/user'
 import { Textarea } from '@/components/ui/textarea'
 
 import { SplitsClient } from '@0xsplits/splits-sdk'
-import { useReducer } from 'react'
+import { useEffect, useReducer } from 'react'
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url)
-  const txHash = url.searchParams.get('txHash')
-
-  console.log('txHash', txHash)
+  const value = url.searchParams.get('value')
 
   const user = (await requireAuthedUser(request)) as User
   const { wallet } = user
   return json({
     wallet: wallet,
-    txHash: txHash,
+
+    value: value ? JSON.parse(value) : undefined,
   })
 }
 
@@ -85,7 +84,7 @@ const validationSchema = z.object({
       required_error: 'Pact Accountability Percentage is required.',
     })
     .min(10, { message: 'Percentage should be greater than or equal to 10' })
-    .max(50, { message: 'Percentage should be less than or equal to 50' }),
+    .max(80, { message: 'Percentage should be less than or equal to 80' }),
 })
 
 // const mutation = makeDomainFunction(validationSchema)(async (values) => {
@@ -111,9 +110,12 @@ export async function action({ request }: ActionFunctionArgs) {
     return json(submission)
   }
   console.log('submission values', JSON.stringify(submission.payload)) // server side log, includes the txHash
-  return redirect(
-    `/app/create-pact?value=${JSON.stringify(submission.payload)}`,
-  )
+
+  await pact(request)
+  return null
+  // return redirect(
+  //   `/app/create-pact?value=${JSON.stringify(submission.payload)}`,
+  // )
 }
 
 type TransactionAction =
@@ -167,19 +169,11 @@ const initialState: TransactionState = {
 }
 
 export default function CreatePactIndexRoute() {
-  const { wallet, txHash } = useLoaderData<typeof loader>()
+  const { wallet, value } = useLoaderData<typeof loader>()
   const [state, dispatch] = useReducer(transactionReducer, initialState)
-  // const [state, dispatch] = useReducer(moveTriplesReducer, {
-  //   reviewState: initialState,
-  //   error: null,
-  // })
 
   if (wallet) {
     console.log('Session wallet', wallet)
-  }
-
-  if (txHash) {
-    console.log('txHash', txHash)
   }
 
   const fetcher = useFetcher<{
@@ -188,14 +182,35 @@ export default function CreatePactIndexRoute() {
     userAddress?: string
   } | null>()
 
+  useEffect(() => {
+    if (value !== null && value?.txHash) {
+      dispatch({ type: 'TRANSACTION_COMPLETE', txHash: value?.txHash })
+    }
+  }, [value, state])
+
   return (
     <main className="flex min-h-screen flex-col items-center ">
       <Header />
       <div className="flex h-full flex-col items-center pt-20">
-        <p className="text-md bg-gray-50/5 cursor-default px-4 font-mono backdrop-blur-sm">
-          Create an Accountability Pact
-        </p>
-        <span className="pb-3 text-success-500">{wallet}</span>
+        {value ? (
+          <>
+            <p className="leading-7 [&:not(:first-child)]:mt-6">
+              Pact Created:
+            </p>
+            <div className="overflow-auto">
+              <pre className="whitespace-pre-wrap">
+                {JSON.stringify(value, null, 2)}
+              </pre>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-md bg-gray-50/5 cursor-default px-4 font-mono backdrop-blur-sm">
+              Create an Accountability Pact
+            </p>
+            <span className="pb-3 text-success-500">{wallet}</span>
+          </>
+        )}
         <p>State: {state.status}</p>
         {state.status === 'idle' && (
           <p>Enter the information to create accountability pact!</p>
@@ -225,7 +240,7 @@ export function CreatePactForm({
   state,
   dispatch,
 }: CreatePactFormProps) {
-  const { wallet, txHash } = useLoaderData<typeof loader>()
+  const { wallet } = useLoaderData<typeof loader>()
   const navigation = useNavigation()
 
   const {
@@ -247,81 +262,85 @@ export function CreatePactForm({
         event.preventDefault()
         dispatch({ type: 'START_TRANSACTION' })
 
-        try {
-          const formElement = event.target as HTMLFormElement
-          const pactAddressValue = formElement.pactAddress.value
+        console.log(submission.intent)
 
-          const pactAccountabilityPercentageValue = parseFloat(
-            formElement.pactAccountabilityPercentage.value,
-          )
+        if (submission.intent === 'create-pact-intent') {
+          try {
+            const formElement = event.target as HTMLFormElement
+            const pactAddressValue = formElement.pactAddress.value
 
-          // Check if the values are numbers
-          if (isNaN(pactAccountabilityPercentageValue)) {
-            throw new Error('Invalid input: Please enter numeric values.')
-          }
+            const pactAccountabilityPercentageValue = parseFloat(
+              formElement.pactAccountabilityPercentage.value,
+            )
 
-          const userValueWithDecimal = parseFloat(
-            pactAccountabilityPercentageValue.toFixed(1),
-          )
-          const calculatedValueWithDecimal = parseFloat(
-            (100.0 - pactAccountabilityPercentageValue).toFixed(1), // Ensure this is also a number
-          )
-
-          if (!walletClientLoading && walletClientData) {
-            dispatch({ type: 'WALLET_SIGNING' })
-
-            const splitsClient = new SplitsClient({
-              chainId: 421613,
-              publicClient: publicClient,
-              walletClient: walletClientData,
-            })
-
-            const splitArgs = {
-              recipients: [
-                {
-                  address: wallet,
-                  percentAllocation: userValueWithDecimal,
-                },
-                {
-                  address: pactAddressValue,
-                  percentAllocation: calculatedValueWithDecimal,
-                },
-              ],
-              distributorFeePercent: 0.0,
+            // Check if the values are numbers
+            if (isNaN(pactAccountabilityPercentageValue)) {
+              throw new Error('Invalid input: Please enter numeric values.')
             }
-            const response = await splitsClient.createSplit(splitArgs)
-            dispatch({ type: 'SPLIT_CREATING' })
 
-            if (response && response.event.transactionHash) {
-              dispatch({
-                type: 'TRANSACTION_COMPLETE',
-                txHash: response.event.transactionHash,
+            const userValueWithDecimal = parseFloat(
+              pactAccountabilityPercentageValue.toFixed(1),
+            )
+            const calculatedValueWithDecimal = parseFloat(
+              (100.0 - pactAccountabilityPercentageValue).toFixed(1), // Ensure this is also a number
+            )
+
+            if (!walletClientLoading && walletClientData) {
+              dispatch({ type: 'WALLET_SIGNING' })
+
+              const splitsClient = new SplitsClient({
+                chainId: 421613,
+                publicClient: publicClient,
+                walletClient: walletClientData,
               })
-              const txHash = response.event.transactionHash
-              const formData = new FormData(formElement) // get the form data from the form elemnt
-              if (txHash !== null) {
+
+              const splitArgs = {
+                recipients: [
+                  {
+                    address: wallet,
+                    percentAllocation: userValueWithDecimal,
+                  },
+                  {
+                    address: pactAddressValue,
+                    percentAllocation: calculatedValueWithDecimal,
+                  },
+                ],
+                distributorFeePercent: 0.0,
+              }
+              const response = await splitsClient.createSplit(splitArgs)
+              dispatch({ type: 'SPLIT_CREATING' })
+
+              if (response && response.event.transactionHash) {
                 dispatch({
-                  type: 'SENDING_TX_HASH',
-                  txHash: txHash,
+                  type: 'TRANSACTION_COMPLETE',
+                  txHash: response.event.transactionHash,
                 })
-                formData.append('txHash', txHash) // append the resolved txHash to the form data
-                fetcher.load(
-                  `/app/create-pact?index&txHash=${txHash}&userAddress=${wallet}`,
-                )
-                // fetcher.submit(formData, {
-                //   method: 'post',
-                // })
+                const txHash = response.event.transactionHash
+                const formData = new FormData(formElement) // get the form data from the form elemnt
+                if (txHash !== null) {
+                  dispatch({
+                    type: 'SENDING_TX_HASH',
+                    txHash: txHash,
+                  })
+                  formData.append('txHash', txHash) // append the resolved txHash to the form data
+                  fetcher.load(
+                    `/app/create-pact?index&txHash=${txHash}&userAddress=${wallet}`,
+                  )
+                  // fetcher.submit(formData, {
+                  //   method: 'post',
+                  // })
+                }
               }
             }
-          }
-        } catch (error) {
-          dispatch({ type: 'TRANSACTION_ERROR', error: 'An error occurred' }) // Handle errors
-          console.error(
-            'An error occurred during transaction or form handling:',
-            error,
-          )
+          } catch (error) {
+            dispatch({ type: 'TRANSACTION_ERROR', error: 'An error occurred' }) // Handle errors
+            console.error(
+              'An error occurred during transaction or form handling:',
+              error,
+            )
 
-          // Handle the error appropriately
+            // Handle the error appropriately
+          }
         }
       },
     })
@@ -363,8 +382,21 @@ export function CreatePactForm({
               {pactAccountabilityPercentage.error}
             </span>
           </div>
-          <Button variant="outline" size="sm" className="block w-full">
-            {navigation.state === 'idle' ? 'Create' : ' Creating'} Pact
+          <Button
+            variant="outline"
+            size="sm"
+            className="block w-full"
+            name={conform.INTENT}
+            value="create-pact-intent"
+            disabled={
+              state.status !== 'idle' && state.status !== 'transaction-complete'
+            }
+          >
+            {/* {navigation.state === 'idle' ? 'Create' : ' Creating'} Pact */}
+            {state.status === 'idle' || state.status === 'transaction-complete'
+              ? 'Create'
+              : ' Creating'}{' '}
+            Pact
           </Button>
         </fetcher.Form>
       </div>
