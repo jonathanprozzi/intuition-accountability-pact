@@ -46,6 +46,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 const addressRegex = /^0x[a-fA-F0-9]{40}$/
+const txHashRegex = /^0x[a-fA-F0-9]{64}$/
 
 function createSchema(
   intent: string,
@@ -57,7 +58,7 @@ function createSchema(
     .object({
       txHash: z
         .string({ required_error: 'Accountability Address is required.' })
-        .regex(addressRegex, { message: 'Invalid tx hash address format.' })
+        .regex(txHashRegex, { message: 'Invalid tx hash address format.' })
         .pipe(
           z.string().superRefine((txHash, ctx) =>
             refine(ctx, {
@@ -93,22 +94,6 @@ function createSchema(
     )
 }
 
-// export async function action({ request }: ActionFunctionArgs) {
-//   const formData = await request.formData()
-//   const submission = parse(formData, { schema: validationSchema })
-
-//   if (!submission.value || submission.intent !== 'submit') {
-//     return json(submission)
-//   }
-//   console.log('submission values', JSON.stringify(submission.payload)) // server side log, includes the txHash
-
-//   await pact(request)
-//   return null
-//   // return redirect(
-//   //   `/app/create-pact?value=${JSON.stringify(submission.payload)}`,
-//   // )
-// }
-
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData()
   const submission = await parse(formData, {
@@ -129,7 +114,7 @@ export async function action({ request }: ActionFunctionArgs) {
   if (!submission.value || submission.intent !== 'submit') {
     return json(submission)
   }
-
+  console.log('submission values to server', submission)
   return redirect(`/app/create-pact?value=${JSON.stringify(submission.value)}`)
 }
 
