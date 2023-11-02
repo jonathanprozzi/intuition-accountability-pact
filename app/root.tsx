@@ -21,9 +21,17 @@ import {
   useLoaderData,
 } from '@remix-run/react'
 import React, { useState } from 'react'
-import { WagmiConfig, configureChains, createConfig } from 'wagmi'
+import {
+  WagmiConfig,
+  configureChains,
+  createConfig,
+  mainnet,
+  usePublicClient,
+} from 'wagmi'
 import { arbitrumGoerli } from 'wagmi/chains'
 import { alchemyProvider } from 'wagmi/providers/alchemy'
+import { SplitsProvider } from '@0xsplits/splits-sdk-react'
+import { createPublicClient, http } from 'viem'
 
 export const links: LinksFunction = () => [
   { rel: 'stylesheet', href: styles },
@@ -89,11 +97,16 @@ export default function App() {
   const { ENV } = useLoaderData<typeof loader>()
   const nonce = useNonce()
 
-  const [{ config, chains }] = useState(() => {
+  const [{ config, chains, splitConfig }] = useState(() => {
     const { chains, publicClient, webSocketPublicClient } = configureChains(
       [arbitrumGoerli],
       [alchemyProvider({ apiKey: ENV.ALCHEMY_API_KEY! })],
     )
+
+    const publicClientSplit = createPublicClient({
+      chain: arbitrumGoerli,
+      transport: http(),
+    })
 
     const { connectors } = getDefaultWallets({
       appName: 'Intuition Accountability Pact',
@@ -108,15 +121,21 @@ export default function App() {
       webSocketPublicClient,
     })
 
+    const splitConfig = {
+      chainId: 421613,
+      publicClientSplit,
+    }
+
     return {
       config,
+      splitConfig,
       chains,
     }
   })
 
   return (
     <Document nonce={nonce} env={ENV}>
-      {config && chains ? (
+      {config && chains && splitConfig ? (
         <>
           <WagmiConfig config={config}>
             <RainbowKitProvider
@@ -124,11 +143,13 @@ export default function App() {
               theme={intuitionTheme}
               modalSize="compact"
             >
-              <div className="relative flex h-screen w-full flex-col justify-between">
-                <div className="flex-1">
-                  <Outlet />
+              <SplitsProvider config={splitConfig}>
+                <div className="relative flex h-screen w-full flex-col justify-between">
+                  <div className="flex-1">
+                    <Outlet />
+                  </div>
                 </div>
-              </div>
+              </SplitsProvider>
             </RainbowKitProvider>
           </WagmiConfig>
         </>
