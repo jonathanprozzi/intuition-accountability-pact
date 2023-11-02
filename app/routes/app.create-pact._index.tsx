@@ -69,35 +69,35 @@ const validationSchema = z.object({
   // }),
 })
 
-// export async function action({ request }: ActionFunctionArgs) {
-//   const formData = await request.formData()
-//   const submission = parse(formData, { schema: validationSchema })
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData()
+  const submission = parse(formData, { schema: validationSchema })
 
-//   if (!submission.value || submission.intent !== 'submit') {
-//     return json(submission)
-//   }
-//   console.log('submission values', JSON.stringify(submission.payload))
-//   return redirect(
-//     `/app/create-pact?value=${JSON.stringify(submission.payload)}`,
-//   )
-// }
-
-const mutation = makeDomainFunction(validationSchema)(async (values) => {
-  return values
-})
-
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const resp = await formAction({
-    request,
-    schema: validationSchema,
-    mutation,
-  })
-  if (resp.ok) {
-    // await login(request)
-    console.log('resp', resp)
+  if (!submission.value || submission.intent !== 'submit') {
+    return json(submission)
   }
-  return null
+  console.log('submission values', JSON.stringify(submission.payload))
+  return redirect(
+    `/app/create-pact?value=${JSON.stringify(submission.payload)}`,
+  )
 }
+
+// const mutation = makeDomainFunction(validationSchema)(async (values) => {
+//   return values
+// })
+
+// export const action = async ({ request }: ActionFunctionArgs) => {
+//   const resp = await formAction({
+//     request,
+//     schema: validationSchema,
+//     mutation,
+//   })
+//   if (resp.ok) {
+//     // await login(request)
+//     console.log('resp', resp)
+//   }
+//   return null
+// }
 
 export default function CreatePactIndexRoute() {
   const { wallet } = useLoaderData<typeof loader>()
@@ -122,43 +122,14 @@ export default function CreatePactIndexRoute() {
 
 export function CreatePactForm() {
   const { wallet } = useLoaderData<typeof loader>()
-  // const fetcher = useFetcher<typeof action>()
-  const fetcher = useFetcher<ActionFunctionArgs>()
   const {
     txHash,
     isTransactionLoading,
     isTransactionSuccess,
     initiateTransaction,
   } = useClientTransaction()
-  const [isTransactionInitiated, setIsTransactionInitiated] = useState(false)
+  const fetcher = useFetcher()
 
-  useEffect(() => {
-    if (txHash) {
-      // If the transaction hash is available, proceed with any post-transaction logic
-      // This could involve enabling the form submission button again
-      setIsTransactionInitiated(false)
-    }
-  }, [txHash])
-
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    // let's prevent the default event
-    event.preventDefault()
-
-    // grab the form element
-    let $form = event.currentTarget
-
-    // get the formData from that form
-    let formData = new FormData($form)
-
-    if (txHash) {
-      formData.set('txHash', txHash)
-    }
-
-    // and finally submit the form data, re-using the method and action from the form
-    // submit(formData, {
-    //   action: $form.getAttribute('action') ?? $form.action,
-    // })
-  }
   // const { config } = usePrepareSendTransaction({
   //   to: '0x04EA475026a0AB3e280F749b206fC6332E6939F1',
   //   value: parseEther('0.000001'),
@@ -191,40 +162,48 @@ export function CreatePactForm() {
     onSubmit: async (event, { submission }) => {
       event.preventDefault()
       console.log('submission', submission)
-      const config = await prepareSendTransaction({
-        to: '0x04EA475026a0AB3e280F749b206fC6332E6939F1',
-        value: parseEther('0.000001'),
-      })
-      const { hash } = await sendTransaction(config)
-
-      if (hash) {
-        const { transactionHash, status } = await waitForTransaction({
-          hash: hash,
+      try {
+        const formElement = event.target as HTMLFormElement // Cast the event target to HTMLFormElement
+        const config = await prepareSendTransaction({
+          to: '0x04EA475026a0AB3e280F749b206fC6332E6939F1',
+          value: parseEther('0.000001'),
         })
+        const { hash } = await sendTransaction(config)
 
-        if (status === 'success') {
-          console.log('tx hash', transactionHash)
+        if (hash) {
+          const { transactionHash, status } = await waitForTransaction({
+            hash: hash,
+          })
+
+          if (status === 'success') {
+            console.log('tx hash', transactionHash)
+            const formData = new FormData(formElement) // Use the form element reference here
+            formData.append('txHash', transactionHash)
+            for (const [key, value] of formData.entries()) {
+              console.log(key, value)
+            }
+            // Perform the final form submission with the updated formData
+            // For example:
+            fetcher.submit(formData, {
+              method: 'post',
+            })
+          }
         }
-      }
+      } catch (error) {
+        console.error(
+          'An error occurred during transaction or form handling:',
+          error,
+        )
 
-      // if (!txHash && !isTransactionInitiated) {
-      //   setIsTransactionInitiated(true)
-      //   await initiateTransaction() // This will set the txHash once the transaction is done
-      //   setIsTransactionInitiated(true) // Prevents multiple transactions
-      // } else if (txHash) {
-      //   // Now you have the txHash, submit your form data along with the txHash
-      //   const formData = new FormData(event.currentTarget)
-      //   formData.append('txHash', txHash)
-      //   console.log('txHash', txHash)
-      //   // ... submit the form data to your server using fetcher or a direct POST request ...
-      // }
+        // Handle the error appropriately
+      }
     },
   })
 
   return (
     <Card className="w-full pb-8 pt-4">
       <div className="space-y-4">
-        <form
+        <fetcher.Form
           {...form.props}
           // onSubmit={handleSubmit}
           className="flex flex-col gap-4 p-6"
@@ -256,7 +235,7 @@ export function CreatePactForm() {
           <Button variant="outline" size="sm" className="block w-full">
             {isTransactionLoading ? 'Creating Pact' : 'Create Pact'}
           </Button>
-        </form>
+        </fetcher.Form>
       </div>
       {isTransactionSuccess && <p>tx hash: {txHash}</p>}
     </Card>
