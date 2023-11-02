@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { conform, useForm } from '@conform-to/react'
+import { useEffect, useRef, useState } from 'react'
+import { conform, useForm, validate, refine } from '@conform-to/react'
 import { parse } from '@conform-to/zod'
 import type { ActionFunctionArgs, LoaderFunctionArgs } from '@remix-run/node'
 import { json, redirect } from '@remix-run/node'
@@ -44,7 +44,29 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 const addressRegex = /^0x[a-fA-F0-9]{40}$/
 
+// function createValidationSchema(
+//   intent: string,
+//   options?: {
+//     isValidTxHash?: () => Promise<string>
+//   },
+// ) {
+//   return z.object({
+//     accountabilityAddress: z
+//       .string({ required_error: 'Accountability Address is required.' })
+//       .regex(addressRegex, { message: 'Invalid Ethereum address format.' }),
+//     pactDescription: z.string({
+//       required_error: 'Pact Description is required.',
+//     }),
+//     txHash: z
+//       .string({ required_error: 'Accountability Address is required.' })
+//       .regex(addressRegex, { message: 'Invalid Ethereum address format.' }),
+//   })
+// }
+
 const validationSchema = z.object({
+  userAddress: z
+    .string({ required_error: 'Accountability Address is required.' })
+    .regex(addressRegex, { message: 'Invalid Ethereum address format.' }),
   accountabilityAddress: z
     .string({ required_error: 'Accountability Address is required.' })
     .regex(addressRegex, { message: 'Invalid Ethereum address format.' }),
@@ -76,6 +98,7 @@ export default function CreatePactIndexRoute() {
 
 export function CreatePactForm() {
   const { wallet } = useLoaderData<typeof loader>()
+  const buttonRef = useRef<HTMLButtonElement>(null)
 
   const { config } = usePrepareSendTransaction({
     to: '0x04EA475026a0AB3e280F749b206fC6332E6939F1',
@@ -84,21 +107,31 @@ export function CreatePactForm() {
   const { data, status, isLoading, isSuccess, sendTransaction } =
     useSendTransaction(config)
 
-  const [form, { accountabilityAddress, pactDescription }] = useForm({
-    onSubmit(event, { submission }) {
-      event.preventDefault()
+  const [form, { accountabilityAddress, pactDescription, userAddress }] =
+    useForm({
+      onValidate({ formData }) {
+        return parse(formData, { schema: validationSchema })
+      },
 
-      console.log('intent', submission.intent)
-
-      console.log('payload', submission.payload)
-    },
-  })
+      shouldValidate: 'onBlur',
+      onSubmit(event, { submission }) {
+        event.preventDefault()
+        if (submission.intent) {
+          console.log('Creating pact with transaction:', submission.payload)
+        }
+      },
+    })
 
   return (
     <Card className="w-full pb-8 pt-4">
       <div className="space-y-4">
         <form {...form.props} className=" flex flex-col gap-4 p-6">
-          <input type="hidden" name="userAddress" value={wallet} />
+          <Input
+            {...conform.input(userAddress)}
+            type="hidden"
+            name="userAddress"
+            value={wallet}
+          />
           <div className="flex flex-col gap-2">
             <Label className="m-x-auto text-sm text-foreground">
               Accountability Address
@@ -122,8 +155,7 @@ export function CreatePactForm() {
             size="sm"
             className="block w-full"
             type="submit"
-            value="create-pact"
-            // name={conform.INTENT}
+            value="create-pact-with-transaction"
           >
             Create Pact
           </Button>
