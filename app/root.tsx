@@ -30,7 +30,6 @@ import {
 } from 'wagmi'
 import { arbitrumGoerli } from 'wagmi/chains'
 import { alchemyProvider } from 'wagmi/providers/alchemy'
-import { SplitsProvider } from '@0xsplits/splits-sdk-react'
 import { createPublicClient, http } from 'viem'
 
 export const links: LinksFunction = () => [
@@ -143,13 +142,11 @@ export default function App() {
               theme={intuitionTheme}
               modalSize="compact"
             >
-              <SplitsProvider config={splitConfig}>
-                <div className="relative flex h-screen w-full flex-col justify-between">
-                  <div className="flex-1">
-                    <Outlet />
-                  </div>
+              <div className="relative flex h-screen w-full flex-col justify-between">
+                <div className="flex-1">
+                  <Outlet />
                 </div>
-              </SplitsProvider>
+              </div>
             </RainbowKitProvider>
           </WagmiConfig>
         </>

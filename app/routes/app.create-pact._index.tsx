@@ -15,6 +15,8 @@ import {
   prepareSendTransaction,
   waitForTransaction,
 } from '@wagmi/core'
+import { usePublicClient, useWalletClient } from 'wagmi'
+import { getWalletClient, getPublicClient } from '@wagmi/core'
 import Header from '@/components/header'
 import { requireAuthedUser } from '@/lib/services/auth.server'
 import { User } from 'types/user'
@@ -37,6 +39,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 const addressRegex = /^0x[a-fA-F0-9]{40}$/
 
+// @TODO: async validation and create the schema dynamically to include txHash
 const validationSchema = z.object({
   userAddress: z
     .string({ required_error: 'Accountability Address is required.' })
@@ -88,13 +91,16 @@ export default function CreatePactIndexRoute() {
 
 export function CreatePactForm() {
   const { wallet } = useLoaderData<typeof loader>()
-  const {
-    txHash,
-    isTransactionLoading,
-    isTransactionSuccess,
-    initiateTransaction,
-  } = useClientTransaction()
+  const { txHash, isTransactionLoading, isTransactionSuccess } =
+    useClientTransaction()
   const fetcher = useFetcher()
+  const {
+    data: walletClientData,
+    isError: walletClientError,
+    isLoading: walletClientLoading,
+  } = useWalletClient()
+
+  const publicClient = usePublicClient()
 
   const [form, { userAddress, pactAddress, pactDescription }] = useForm({
     onValidate({ formData }) {
@@ -109,23 +115,40 @@ export function CreatePactForm() {
         const formElement = event.target as HTMLFormElement // Cast the event target to HTMLFormElement
         const pactAddressValue = formElement.pactAddress.value
 
-        const config = await prepareSendTransaction({
-          to: pactAddressValue,
-          value: parseEther('0.001'),
-        })
-        const { hash } = await sendTransaction(config)
-
-        if (hash) {
-          const { transactionHash, status } = await waitForTransaction({
-            hash: hash,
+        if (!walletClientLoading && walletClientData) {
+          console.log('wallet client', walletClientData)
+          const splitsClient = new SplitsClient({
+            chainId: 421613,
+            publicClient: publicClient, // viem public client (optional, required if using any of the contract functions)
+            walletClient: walletClientData, // viem wallet client (optional, required if using any contract write functions. must have an account already attached)
           })
 
-          if (status === 'success') {
-            const formData = new FormData(formElement) // Use the form element reference here
-            formData.append('txHash', transactionHash)
-            fetcher.submit(formData, {
-              method: 'post',
-            })
+          const splitArgs = {
+            recipients: [
+              {
+                address: wallet,
+                percentAllocation: 53.0,
+              },
+              {
+                address: pactAddressValue,
+                percentAllocation: 47.0,
+              },
+            ],
+            distributorFeePercent: 0.0,
+          }
+          const response = await splitsClient.createSplit(splitArgs)
+          console.log('response', response)
+
+          if (response) {
+            const txHash = response.event.transactionHash
+            console.log('txHash', txHash)
+            const formData = new FormData(formElement) // get the form data from the form elemnt
+            if (txHash !== null) {
+              formData.append('txHash', txHash) // append the resolved txHash to the form data
+              fetcher.submit(formData, {
+                method: 'post',
+              }) // submit the form to the actions handler
+            }
           }
         }
       } catch (error) {
