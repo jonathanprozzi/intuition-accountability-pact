@@ -178,9 +178,9 @@ export default function CreatePactIndexRoute() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center ">
+    <main className="flex min-h-screen flex-col items-center">
       <Header />
-      <div className="flex h-full flex-col items-center pt-20">
+      <div className="sm:min-w-md lg:min-w-lg w-50 flex h-full w-6/12	 flex-col items-center pt-20 ">
         {value ? (
           <>
             <p className="leading-7 [&:not(:first-child)]:mt-6">
@@ -196,26 +196,31 @@ export default function CreatePactIndexRoute() {
             </Button>
           </>
         ) : (
-          <>
-            <p className="text-md bg-gray-50/5 cursor-default px-4 font-mono backdrop-blur-sm">
-              Create an Accountability Pact
-            </p>
-            <span className="pb-3 text-success-500">{wallet}</span>
-            <p>State: {state.status}</p>
-            {state.status === 'idle' && (
-              <p>Enter the information to create accountability pact!</p>
-            )}
-            {state.status === 'signing-wallet' && (
-              <p>Sign the transaction in your wallet!</p>
-            )}
-            {state.status === 'transaction-complete' && (
-              <p>tx Complete! {state.txHash}</p>
-            )}
-            {state.status === 'sending-txHash' && (
-              <p>Sending txHash! {state.txHash}</p>
-            )}
+          <div className="w-full">
+            <div className="pb-4">
+              {state.status === 'idle' && (
+                <p className="text-md bg-gray-50/5 cursor-default px-4 font-mono backdrop-blur-sm">
+                  Create an Accountability Pact
+                </p>
+              )}
+              {state.status === 'signing-wallet' && (
+                <p className="text-md bg-gray-50/5 cursor-default px-4 font-mono backdrop-blur-sm">
+                  Sign the transaction in your wallet!
+                </p>
+              )}
+              {state.status === 'transaction-complete' && (
+                <p className="text-md bg-gray-50/5 cursor-default px-4 font-mono backdrop-blur-sm">
+                  tx Complete! {state.txHash}
+                </p>
+              )}
+              {state.status === 'sending-txHash' && (
+                <p className="text-md bg-gray-50/5 cursor-default px-4 font-mono backdrop-blur-sm">
+                  Sending txHash! {state.txHash}
+                </p>
+              )}
+            </div>
             <CreatePactForm state={state} dispatch={dispatch} />
-          </>
+          </div>
         )}
       </div>
     </main>
@@ -363,7 +368,7 @@ export function CreatePactForm({
   }
 
   return (
-    <Card className="w-full pb-8 pt-4">
+    <Card className="md:min-w-lg lg:min-w-xl w-full  pb-8">
       <div className="space-y-4">
         <fetcher.Form
           method="post"
