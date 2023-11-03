@@ -187,7 +187,7 @@ export default function CreatePactIndexRoute() {
             </p>
             {payload?.txHash && (
               <a
-                href={`https://goerli.arbiscan.io/tx/${value?.txHash}`}
+                href={`https://goerli.arbiscan.io/tx/${payload?.txHash}`}
                 target="blank"
                 className="rounded  py-1 text-success-500 transition-colors duration-300 ease-in-out  hover:text-white"
               >
