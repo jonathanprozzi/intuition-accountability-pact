@@ -19,13 +19,12 @@ import { Label } from '@/components/ui/label'
 import { usePublicClient, useWalletClient } from 'wagmi'
 
 import Header from '@/components/header'
-import { pact, requireAuthedUser } from '@/lib/services/auth.server'
+import { requireAuthedUser } from '@/lib/services/auth.server'
 import { User } from 'types/user'
 import { Textarea } from '@/components/ui/textarea'
 
 import { SplitsClient } from '@0xsplits/splits-sdk'
 import { useReducer, useState } from 'react'
-import app from './app'
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url)
@@ -42,12 +41,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 const addressRegex = /^0x[a-fA-F0-9]{40}$/
-const txHashRegex = /^0x[a-fA-F0-9]{64}$/
 
 function createSchema(
   intent: string,
   constraint: {
-    // isTxHash?: (txHash: string) => Promise<boolean>
     differentAddresses?: (pactAddress: string) => Promise<boolean>
   } = {},
 ) {
@@ -72,7 +69,7 @@ function createSchema(
         userAddress: z
           .string({ required_error: 'Accountability Address is required.' })
           .regex(addressRegex, { message: 'Invalid Ethereum address format.' }),
-
+        pactDescription: z.string().optional(),
         pactAccountabilityPercentage: z
           .number({
             required_error: 'Pact Accountability Percentage is required.',
@@ -172,9 +169,9 @@ export default function CreatePactIndexRoute() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center">
+    <main className="flex min-h-screen flex-col items-center gap-y-12 p-4 lg:p-24">
       <Header />
-      <div className="sm:min-w-md lg:min-w-lg w-50 flex h-full w-6/12	 flex-col items-center pt-20 ">
+      <div className="sm:min-w-md lg:min-w-md w-50 flex h-full w-6/12	 flex-col items-center ">
         {payload ? (
           <>
             <p className="text-xl leading-7 [&:not(:first-child)]:mt-6">
@@ -201,9 +198,6 @@ export default function CreatePactIndexRoute() {
         ) : (
           <div className="w-full">
             <div className="pb-4">
-              <p className="text-md bg-gray-50/5 cursor-default text-center font-mono backdrop-blur-sm">
-                {state.status}
-              </p>
               {state.status === 'idle' && (
                 <p className="text-md bg-gray-50/5 cursor-default text-center font-mono backdrop-blur-sm">
                   Create an Accountability Pact
@@ -261,17 +255,19 @@ export function CreatePactForm({ state, dispatch }: CreatePactFormProps) {
 
   const publicClient = usePublicClient()
 
-  const [form, { userAddress, pactAddress, pactAccountabilityPercentage }] =
-    useForm({
-      lastSubmission,
+  const [
+    form,
+    { userAddress, pactAddress, pactDescription, pactAccountabilityPercentage },
+  ] = useForm({
+    lastSubmission,
 
-      onValidate({ formData }) {
-        return parse(formData, {
-          schema: (intent) => createSchema(intent),
-        })
-      },
-      shouldValidate: 'onBlur',
-    })
+    onValidate({ formData }) {
+      return parse(formData, {
+        schema: (intent) => createSchema(intent),
+      })
+    },
+    shouldValidate: 'onBlur',
+  })
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -389,7 +385,7 @@ export function CreatePactForm({ state, dispatch }: CreatePactFormProps) {
   }
 
   return (
-    <Card className="md:min-w-lg lg:min-w-xl w-full  pb-8">
+    <Card className="md:min-w-md lg:min-w-lg w-full pb-8">
       <div className="space-y-4">
         <fetcher.Form
           {...form.props}
@@ -418,21 +414,25 @@ export function CreatePactForm({ state, dispatch }: CreatePactFormProps) {
               </div>
             ))}
           </div>
-          {/* <div className="w-100 flex flex-col flex-wrap gap-2">
+          <div className="w-100 flex flex-col flex-wrap gap-2">
             <Label className="m-x-auto text-sm text-foreground">
               Pact Description
             </Label>
             <Textarea {...conform.input(pactDescription)} />
-            <span className="flex items-center text-xs font-medium tracking-wide text-red-500">
-              {pactDescription.error}
-            </span>
-          </div> */}
+            {formErrors?.pactDescription?.map((message, index) => (
+              <div
+                key={index}
+                className="flex items-center text-xs font-medium tracking-wide text-red-500"
+              >
+                {message}
+              </div>
+            ))}
+          </div>
           <div className="flex flex-col gap-2">
             <Label className="m-x-auto text-sm text-foreground">
               Pact Accountability Percentage
             </Label>
             <Input {...conform.input(pactAccountabilityPercentage)} />
-
             {formErrors?.pactAccountabilityPercentage?.map((message, index) => (
               <div
                 key={index}
@@ -447,11 +447,7 @@ export function CreatePactForm({ state, dispatch }: CreatePactFormProps) {
             size="sm"
             className="block w-full"
             disabled={isSubmitting}
-            // disabled={
-            //   state.status !== 'idle' && state.status !== 'transaction-complete'
-            // }
           >
-            {/* {navigation.state === 'idle' ? 'Create' : ' Creating'} Pact */}
             {isSubmitting ? 'Create' : ' Creating'} Pact
           </Button>
         </fetcher.Form>
