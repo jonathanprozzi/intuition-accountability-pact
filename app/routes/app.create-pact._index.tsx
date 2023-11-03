@@ -19,12 +19,13 @@ import { Label } from '@/components/ui/label'
 import { usePublicClient, useWalletClient } from 'wagmi'
 
 import Header from '@/components/header'
-import { requireAuthedUser } from '@/lib/services/auth.server'
+import { pact, requireAuthedUser } from '@/lib/services/auth.server'
 import { User } from 'types/user'
 import { Textarea } from '@/components/ui/textarea'
 
 import { SplitsClient } from '@0xsplits/splits-sdk'
 import { useReducer, useState } from 'react'
+import app from './app'
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url)
@@ -56,9 +57,9 @@ function createSchema(
         .string({ required_error: 'Accountability Address is required.' })
         .regex(addressRegex, { message: 'Invalid tx hash address format.' })
         .pipe(
-          z.string().superRefine((txHash, ctx) =>
+          z.string().superRefine((pactAddress, ctx) =>
             refine(ctx, {
-              validate: () => constraint.differentAddresses?.(txHash),
+              validate: () => constraint.differentAddresses?.(pactAddress),
               when: intent === 'submit' || intent === 'validate/pactAddress',
               message:
                 'Pact Accountability Address must be different than your address.',
@@ -71,12 +72,7 @@ function createSchema(
         userAddress: z
           .string({ required_error: 'Accountability Address is required.' })
           .regex(addressRegex, { message: 'Invalid Ethereum address format.' }),
-        // pactAddress: z
-        //   .string({ required_error: 'Pact Address is required.' })
-        //   .regex(addressRegex, { message: 'Invalid Ethereum address format.' }),
-        // pactDescription: z.string({
-        //   required_error: 'Pact Description is required.',
-        // }),
+
         pactAccountabilityPercentage: z
           .number({
             required_error: 'Pact Accountability Percentage is required.',
@@ -93,15 +89,14 @@ function createSchema(
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData()
+  const userAddress = formData.get('userAddress')
   const submission = await parse(formData, {
     schema: (intent) =>
       createSchema(intent, {
         differentAddresses(pactAddress) {
           return new Promise((resolve) => {
             setTimeout(() => {
-              resolve(
-                pactAddress !== '0x25709998B542f1Be27D19Fa0B3A9A67302bc1b94',
-              )
+              resolve(pactAddress !== userAddress)
             }, 500)
           })
         },
@@ -112,7 +107,7 @@ export async function action({ request }: ActionFunctionArgs) {
   if (!submission.value || submission.intent !== 'submit') {
     return json(submission)
   }
-  console.log('submission values to server', submission)
+  console.log('submission payload to server', submission.payload)
   return redirect(
     `/app/create-pact?payload=${JSON.stringify(submission.payload)}`,
   )
@@ -120,7 +115,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
 type TransactionAction =
   | { type: 'START_TRANSACTION' }
-  | { type: 'WALLET_SIGNING' }
+  | { type: 'SIGNING_WALLET' }
   | { type: 'SPLIT_CREATING' }
   | { type: 'TRANSACTION_COMPLETE'; txHash: `0x${string}` }
   | { type: 'SENDING_TX_HASH'; txHash: `0x${string}` }
@@ -147,7 +142,7 @@ function transactionReducer(
   switch (action.type) {
     case 'START_TRANSACTION':
       return { ...state, status: 'idle' }
-    case 'WALLET_SIGNING':
+    case 'SIGNING_WALLET':
       return { ...state, status: 'signing-wallet' }
     case 'SPLIT_CREATING':
       return { ...state, status: 'creating-split' }
@@ -206,27 +201,32 @@ export default function CreatePactIndexRoute() {
         ) : (
           <div className="w-full">
             <div className="pb-4">
-              <p className="text-md bg-gray-50/5 cursor-default px-4 font-mono backdrop-blur-sm">
+              <p className="text-md bg-gray-50/5 cursor-default text-center font-mono backdrop-blur-sm">
                 {state.status}
               </p>
               {state.status === 'idle' && (
-                <p className="text-md bg-gray-50/5 cursor-default px-4 font-mono backdrop-blur-sm">
+                <p className="text-md bg-gray-50/5 cursor-default text-center font-mono backdrop-blur-sm">
                   Create an Accountability Pact
                 </p>
               )}
               {state.status === 'signing-wallet' && (
-                <p className="text-md bg-gray-50/5 cursor-default px-4 font-mono backdrop-blur-sm">
+                <p className="text-md bg-gray-50/5 cursor-default text-center font-mono backdrop-blur-sm">
                   Sign the transaction in your wallet!
                 </p>
               )}
               {state.status === 'transaction-complete' && (
-                <p className="text-md bg-gray-50/5 cursor-default px-4 font-mono backdrop-blur-sm">
+                <p className="text-md bg-gray-50/5 cursor-default text-center font-mono backdrop-blur-sm">
                   tx Complete! {state.txHash}
                 </p>
               )}
               {state.status === 'sending-txHash' && (
-                <p className="text-md bg-gray-50/5 cursor-default px-4 font-mono backdrop-blur-sm">
+                <p className="text-md bg-gray-50/5 cursor-default text-center font-mono backdrop-blur-sm">
                   Sending txHash! {state.txHash}
+                </p>
+              )}
+              {state.status === 'transaction-error' && (
+                <p className="text-md bg-gray-50/5 cursor-default text-center font-mono backdrop-blur-sm">
+                  Error: {state.error}
                 </p>
               )}
             </div>
@@ -239,15 +239,10 @@ export default function CreatePactIndexRoute() {
 }
 
 interface CreatePactFormProps {
-  // fetcher: FetcherWithComponents<any>
   state: TransactionState
   dispatch: React.Dispatch<TransactionAction>
 }
-export function CreatePactForm({
-  // fetcher,
-  state,
-  dispatch,
-}: CreatePactFormProps) {
+export function CreatePactForm({ state, dispatch }: CreatePactFormProps) {
   const { wallet } = useLoaderData<typeof loader>()
 
   const fetcher = useFetcher()
@@ -317,7 +312,7 @@ export function CreatePactForm({
       )
 
       if (!walletClientLoading && walletClientData) {
-        dispatch({ type: 'WALLET_SIGNING' })
+        dispatch({ type: 'SIGNING_WALLET' })
 
         const splitsClient = new SplitsClient({
           chainId: 421613,
@@ -362,17 +357,40 @@ export function CreatePactForm({
           }
         }
       }
-    } catch (error) {
-      console.error(
-        'An error occurred during transaction or form handling:',
-        error,
-      )
+    } catch (error: unknown) {
+      console.error(`Pact Create Error: ${error}`)
+      if (error instanceof Error) {
+        if (
+          error.message.startsWith(
+            'Pact Create Error: TransactionExecutionError: User rejected the request.',
+          )
+        ) {
+          dispatch({
+            type: 'TRANSACTION_ERROR',
+            error: 'User rejected transaction.',
+          })
+          return
+        }
+
+        if (error instanceof Error) {
+          if (
+            error.message.startsWith(
+              'Pact Create Error: ContractFunctionExecutionError: The contract function "createSplit" reverted..',
+            )
+          ) {
+            dispatch({
+              type: 'TRANSACTION_ERROR',
+              error: 'Split already exists. Try changing one of the values.',
+            })
+            return
+          }
+        }
+      }
     }
   }
 
   return (
     <Card className="md:min-w-lg lg:min-w-xl w-full  pb-8">
-      <p>{isSubmitting === true ? 'submitting' : 'not submitting'}</p>
       <div className="space-y-4">
         <fetcher.Form
           {...form.props}
@@ -384,6 +402,7 @@ export function CreatePactForm({
             type="hidden"
             name="userAddress"
             value={wallet}
+            className="border-none"
           />
           <div className="flex flex-col gap-2">
             <Label className="m-x-auto text-sm text-foreground">
