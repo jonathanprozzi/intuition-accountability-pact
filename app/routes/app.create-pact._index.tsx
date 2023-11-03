@@ -448,7 +448,7 @@ export function CreatePactForm({ state, dispatch }: CreatePactFormProps) {
             className="block w-full"
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Create' : ' Creating'} Pact
+            {isSubmitting === true ? 'Creating' : 'Create'} Pact
           </Button>
         </fetcher.Form>
       </div>
