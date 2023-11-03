@@ -178,7 +178,7 @@ export default function CreatePactIndexRoute() {
         {payload ? (
           <>
             <p className="text-xl leading-7 [&:not(:first-child)]:mt-6">
-              Pact Created 🪄
+              👁️ Pact Created 👁️
             </p>
             {payload?.txHash && (
               <a
@@ -186,7 +186,7 @@ export default function CreatePactIndexRoute() {
                 target="blank"
                 className="rounded  py-1 text-success-500 transition-colors duration-300 ease-in-out  hover:text-white"
               >
-                View on Explorer 🔮
+                View on Explorer
               </a>
             )}
             <div className="overflow-auto">
@@ -211,17 +211,17 @@ export default function CreatePactIndexRoute() {
               )}
               {state.status === 'signing-wallet' && (
                 <p className="text-md bg-gray-50/5 cursor-default text-center font-mono backdrop-blur-sm">
-                  Sign the transaction in your wallet!
+                  🪄 Sign the transaction in your wallet 🪄
                 </p>
               )}
               {state.status === 'transaction-complete' && (
                 <p className="text-md bg-gray-50/5 cursor-default text-center font-mono backdrop-blur-sm">
-                  tx Complete! {state.txHash}
+                  🔮 tx Complete 🔮
                 </p>
               )}
               {state.status === 'sending-txHash' && (
                 <p className="text-md bg-gray-50/5 cursor-default text-center font-mono backdrop-blur-sm">
-                  Sending txHash! {state.txHash}
+                  🧙🏼 Sending txHash 🧙🏼
                 </p>
               )}
               {state.status === 'transaction-error' && (
@@ -294,95 +294,94 @@ export function CreatePactForm({ state, dispatch }: CreatePactFormProps) {
     if (submission.error && Object.keys(submission.error).length === 0) {
       setFormErrors(null)
       setSubmitting(true)
-    }
 
-    try {
-      const formElement = event.target as HTMLFormElement
-      const pactAddressValue = formElement.pactAddress.value
+      try {
+        const formElement = event.target as HTMLFormElement
+        const pactAddressValue = formElement.pactAddress.value
 
-      const pactAccountabilityPercentageValue = parseFloat(
-        formElement.pactAccountabilityPercentage.value,
-      )
+        const pactAccountabilityPercentageValue = parseFloat(
+          formElement.pactAccountabilityPercentage.value,
+        )
 
-      const userValueWithDecimal = parseFloat(
-        pactAccountabilityPercentageValue.toFixed(1),
-      )
-      const calculatedValueWithDecimal = parseFloat(
-        (100.0 - pactAccountabilityPercentageValue).toFixed(1), // Ensure this is also a number
-      )
+        const userValueWithDecimal = parseFloat(
+          pactAccountabilityPercentageValue.toFixed(1),
+        )
+        const calculatedValueWithDecimal = parseFloat(
+          (100.0 - pactAccountabilityPercentageValue).toFixed(1), // Ensure this is also a number
+        )
 
-      if (!walletClientLoading && walletClientData) {
-        dispatch({ type: 'SIGNING_WALLET' })
-
-        const splitsClient = new SplitsClient({
-          chainId: 421613,
-          publicClient: publicClient,
-          walletClient: walletClientData,
-        })
-
-        const splitArgs = {
-          recipients: [
-            {
-              address: wallet,
-              percentAllocation: userValueWithDecimal,
-            },
-            {
-              address: pactAddressValue,
-              percentAllocation: calculatedValueWithDecimal,
-            },
-          ],
-          distributorFeePercent: 0.0,
-        }
-        const response = await splitsClient.createSplit(splitArgs)
-        dispatch({ type: 'SPLIT_CREATING' })
-
-        if (response && response.event.transactionHash) {
-          dispatch({
-            type: 'TRANSACTION_COMPLETE',
-            txHash: response.event.transactionHash,
+        if (!walletClientLoading && walletClientData) {
+          const splitsClient = new SplitsClient({
+            chainId: 421613,
+            publicClient: publicClient,
+            walletClient: walletClientData,
           })
-          const txHash = response.event.transactionHash
-          const formData = new FormData(formElement) // get the form data from the form elemnt
-          if (txHash !== null) {
+
+          const splitArgs = {
+            recipients: [
+              {
+                address: wallet,
+                percentAllocation: userValueWithDecimal,
+              },
+              {
+                address: pactAddressValue,
+                percentAllocation: calculatedValueWithDecimal,
+              },
+            ],
+            distributorFeePercent: 0.0,
+          }
+          dispatch({ type: 'SIGNING_WALLET' })
+          const response = await splitsClient.createSplit(splitArgs)
+          dispatch({ type: 'SPLIT_CREATING' })
+
+          if (response && response.event.transactionHash) {
             dispatch({
-              type: 'SENDING_TX_HASH',
-              txHash: txHash,
+              type: 'TRANSACTION_COMPLETE',
+              txHash: response.event.transactionHash,
             })
-            console.log('txHash', txHash)
-            formData.append('txHash', txHash) // append the resolved txHash to the form data
-            fetcher.submit(formData, {
-              method: 'post',
-            })
-            setSubmitting(false)
+            const txHash = response.event.transactionHash
+            const formData = new FormData(formElement) // get the form data from the form elemnt
+            if (txHash !== null) {
+              dispatch({
+                type: 'SENDING_TX_HASH',
+                txHash: txHash,
+              })
+              console.log('txHash', txHash)
+              formData.append('txHash', txHash) // append the resolved txHash to the form data
+              fetcher.submit(formData, {
+                method: 'post',
+              })
+              setSubmitting(false)
+            }
           }
         }
-      }
-    } catch (error: unknown) {
-      console.error(`Pact Create Error: ${error}`)
-      if (error instanceof Error) {
-        if (
-          error.message.startsWith(
-            'Pact Create Error: TransactionExecutionError: User rejected the request.',
-          )
-        ) {
-          dispatch({
-            type: 'TRANSACTION_ERROR',
-            error: 'User rejected transaction.',
-          })
-          return
-        }
-
+      } catch (error: unknown) {
+        console.error(`Pact Create Error: ${error}`)
         if (error instanceof Error) {
           if (
             error.message.startsWith(
-              'Pact Create Error: ContractFunctionExecutionError: The contract function "createSplit" reverted..',
+              'Pact Create Error: TransactionExecutionError: User rejected the request.',
             )
           ) {
             dispatch({
               type: 'TRANSACTION_ERROR',
-              error: 'Split already exists. Try changing one of the values.',
+              error: 'User rejected transaction.',
             })
             return
+          }
+
+          if (error instanceof Error) {
+            if (
+              error.message.startsWith(
+                'Pact Create Error: ContractFunctionExecutionError: The contract function "createSplit" reverted..',
+              )
+            ) {
+              dispatch({
+                type: 'TRANSACTION_ERROR',
+                error: 'Split already exists. Try changing one of the values.',
+              })
+              return
+            }
           }
         }
       }
