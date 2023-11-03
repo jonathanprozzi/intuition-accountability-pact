@@ -183,9 +183,17 @@ export default function CreatePactIndexRoute() {
       <div className="sm:min-w-md lg:min-w-lg w-50 flex h-full w-6/12	 flex-col items-center pt-20 ">
         {value ? (
           <>
-            <p className="leading-7 [&:not(:first-child)]:mt-6">
-              Pact Created:
+            <p className="text-xl leading-7 [&:not(:first-child)]:mt-6">
+              Pact Created 🪄
             </p>
+            {value?.txHash && (
+              <a
+                href={`https://goerli.arbiscan.io/tx/${value?.txHash}`}
+                className="rounded  py-1 text-success-500 transition-colors duration-300 ease-in-out  hover:text-white"
+              >
+                View on Explorer 🔮
+              </a>
+            )}
             <div className="overflow-auto">
               <pre className="whitespace-pre-wrap">
                 {JSON.stringify(value, null, 2)}
@@ -356,7 +364,7 @@ export function CreatePactForm({
         }
       }
     } catch (error) {
-      dispatch({ type: 'TRANSACTION_ERROR', error: 'An error occurred' }) // Handle errors
+      // dispatch({ type: 'TRANSACTION_ERROR', error: 'An error occurred' }) // Handle errors
       console.error(
         'An error occurred during transaction or form handling:',
         error,
