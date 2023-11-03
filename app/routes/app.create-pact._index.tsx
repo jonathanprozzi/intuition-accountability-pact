@@ -3,35 +3,28 @@ import { parse, refine } from '@conform-to/zod'
 import type { ActionFunctionArgs, LoaderFunctionArgs } from '@remix-run/node'
 import { json, redirect } from '@remix-run/node'
 import {
-  FetcherWithComponents,
   useFetcher,
   useLoaderData,
   useNavigation,
-  Form,
   useActionData,
   Link,
 } from '@remix-run/react'
-import { custom, isValid, z } from 'zod'
+import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Copy } from '@/components/ui/copy'
+
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-import {
-  sendTransaction,
-  prepareSendTransaction,
-  waitForTransaction,
-} from '@wagmi/core'
 import { usePublicClient, useWalletClient } from 'wagmi'
-import { getWalletClient, getPublicClient } from '@wagmi/core'
+
 import Header from '@/components/header'
-import { pact, requireAuthedUser } from '@/lib/services/auth.server'
+import { requireAuthedUser } from '@/lib/services/auth.server'
 import { User } from 'types/user'
 import { Textarea } from '@/components/ui/textarea'
 
 import { SplitsClient } from '@0xsplits/splits-sdk'
-import { useEffect, useReducer, useState } from 'react'
+import { useReducer, useState } from 'react'
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url)
@@ -52,20 +45,22 @@ const txHashRegex = /^0x[a-fA-F0-9]{64}$/
 function createSchema(
   intent: string,
   constraint: {
-    isTxHash?: (txHash: string) => Promise<boolean>
+    // isTxHash?: (txHash: string) => Promise<boolean>
+    differentAddresses?: (pactAddress: string) => Promise<boolean>
   } = {},
 ) {
   return z
     .object({
-      txHash: z
+      pactAddress: z
         .string({ required_error: 'Accountability Address is required.' })
-        .regex(txHashRegex, { message: 'Invalid tx hash address format.' })
+        .regex(addressRegex, { message: 'Invalid tx hash address format.' })
         .pipe(
           z.string().superRefine((txHash, ctx) =>
             refine(ctx, {
-              validate: () => constraint.isTxHash?.(txHash),
+              validate: () => constraint.differentAddresses?.(txHash),
               when: intent === 'submit' || intent === 'validate/txHash',
-              message: 'txHash not provided',
+              message:
+                'Accountability Address must be different than your address.',
             }),
           ),
         ),
@@ -75,9 +70,9 @@ function createSchema(
         userAddress: z
           .string({ required_error: 'Accountability Address is required.' })
           .regex(addressRegex, { message: 'Invalid Ethereum address format.' }),
-        pactAddress: z
-          .string({ required_error: 'Pact Address is required.' })
-          .regex(addressRegex, { message: 'Invalid Ethereum address format.' }),
+        // pactAddress: z
+        //   .string({ required_error: 'Pact Address is required.' })
+        //   .regex(addressRegex, { message: 'Invalid Ethereum address format.' }),
         // pactDescription: z.string({
         //   required_error: 'Pact Description is required.',
         // }),
@@ -100,11 +95,12 @@ export async function action({ request }: ActionFunctionArgs) {
   const submission = await parse(formData, {
     schema: (intent) =>
       createSchema(intent, {
-        isTxHash(txHash) {
-          console.log('txHash', txHash)
+        differentAddresses(pactAddress) {
           return new Promise((resolve) => {
             setTimeout(() => {
-              resolve(txHash !== null)
+              resolve(
+                pactAddress !== '0x25709998B542f1Be27D19Fa0B3A9A67302bc1b94',
+              )
             }, Math.random() * 300)
           })
         },
@@ -189,6 +185,7 @@ export default function CreatePactIndexRoute() {
             {value?.txHash && (
               <a
                 href={`https://goerli.arbiscan.io/tx/${value?.txHash}`}
+                target="blank"
                 className="rounded  py-1 text-success-500 transition-colors duration-300 ease-in-out  hover:text-white"
               >
                 View on Explorer 🔮
@@ -206,6 +203,9 @@ export default function CreatePactIndexRoute() {
         ) : (
           <div className="w-full">
             <div className="pb-4">
+              <p className="text-md bg-gray-50/5 cursor-default px-4 font-mono backdrop-blur-sm">
+                {state.status}
+              </p>
               {state.status === 'idle' && (
                 <p className="text-md bg-gray-50/5 cursor-default px-4 font-mono backdrop-blur-sm">
                   Create an Accountability Pact
@@ -250,9 +250,10 @@ export function CreatePactForm({
   const fetcher = useFetcher()
   const lastSubmission = useActionData<typeof action>()
   const [isSubmitting, setSubmitting] = useState(false) // State to manage submission status
-  const [formErrors, setFormErrors] = useState<
-    Record<string, string[]> | undefined
-  >()
+  const [formErrors, setFormErrors] = useState<Record<
+    string,
+    string[]
+  > | null>()
 
   const {
     data: walletClientData,
@@ -267,112 +268,119 @@ export function CreatePactForm({
       lastSubmission,
       onValidate({ formData }) {
         return parse(formData, {
-          // Create the schema without any constraint defined
           schema: (intent) => createSchema(intent),
         })
       },
       shouldValidate: 'onBlur',
     })
-  // onSubmit: async (event, { submission }) => {
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    console.log('submitting')
-    event.preventDefault() // Prevent default form submission
+    event.preventDefault()
     dispatch({ type: 'START_TRANSACTION' })
-
-    try {
-      const formElement = event.target as HTMLFormElement
-      const pactAddressValue = formElement.pactAddress.value
-
-      const pactAccountabilityPercentageValue = parseFloat(
-        formElement.pactAccountabilityPercentage.value,
-      )
-
-      // Check if the values are numbers
-      if (isNaN(pactAccountabilityPercentageValue)) {
-        throw new Error('Invalid input: Please enter numeric values.')
-      }
-
-      const userValueWithDecimal = parseFloat(
-        pactAccountabilityPercentageValue.toFixed(1),
-      )
-      const calculatedValueWithDecimal = parseFloat(
-        (100.0 - pactAccountabilityPercentageValue).toFixed(1), // Ensure this is also a number
-      )
-
-      if (!walletClientLoading && walletClientData) {
-        dispatch({ type: 'WALLET_SIGNING' })
-
-        const splitsClient = new SplitsClient({
-          chainId: 421613,
-          publicClient: publicClient,
-          walletClient: walletClientData,
-        })
-
-        const splitArgs = {
-          recipients: [
-            {
-              address: wallet,
-              percentAllocation: userValueWithDecimal,
-            },
-            {
-              address: pactAddressValue,
-              percentAllocation: calculatedValueWithDecimal,
-            },
-          ],
-          distributorFeePercent: 0.0,
-        }
-        const response = await splitsClient.createSplit(splitArgs)
-        dispatch({ type: 'SPLIT_CREATING' })
-
-        if (response && response.event.transactionHash) {
-          dispatch({
-            type: 'TRANSACTION_COMPLETE',
-            txHash: response.event.transactionHash,
-          })
-          const txHash = response.event.transactionHash
-          const formData = new FormData(formElement) // get the form data from the form elemnt
-          if (txHash !== null) {
-            dispatch({
-              type: 'SENDING_TX_HASH',
-              txHash: txHash,
-            })
-            formData.append('txHash', txHash) // append the resolved txHash to the form data
-            const submission = await parse(formData, {
-              schema: (intent) =>
-                createSchema(intent, {
-                  isTxHash(txHash) {
-                    return Promise.resolve(txHash !== null)
-                  },
-                }),
-              async: true,
-            })
-            if (submission.error && Object.keys(submission.error).length > 0) {
-              // Handle validation errors
-              // For example, show the errors in the UI
-              setFormErrors(submission.error)
-              console.error('Validation errors:', submission.error)
-              console.log('errors', submission.error)
-            } else {
-              setSubmitting(true) // Set the submitting state to true
-              console.log('continuing to submit data')
-              fetcher.submit(formData, {
-                method: 'post',
-              })
-              setSubmitting(false)
-            }
-          }
-        }
-      }
-    } catch (error) {
-      // dispatch({ type: 'TRANSACTION_ERROR', error: 'An error occurred' }) // Handle errors
-      console.error(
-        'An error occurred during transaction or form handling:',
-        error,
-      )
-
-      // Handle the error appropriately
+    setSubmitting(true)
+    const formData = new FormData(event.currentTarget)
+    const submission = await parse(formData, {
+      schema: (intent) =>
+        createSchema(intent, {
+          differentAddresses(pactAddress) {
+            return Promise.resolve(pactAddress !== wallet)
+          },
+        }),
+      async: true,
+    })
+    if (submission.error && Object.keys(submission.error).length > 0) {
+      setFormErrors(submission.error)
+      console.error('Validation errors:', submission.error)
     }
-    // },
+    if (submission.error && Object.keys(submission.error).length === 0) {
+      setFormErrors(null)
+      console.log('submission', submission)
+      setSubmitting(false)
+    }
+
+    // try {
+    //   const formElement = event.target as HTMLFormElement
+    //   const pactAddressValue = formElement.pactAddress.value
+
+    //   const pactAccountabilityPercentageValue = parseFloat(
+    //     formElement.pactAccountabilityPercentage.value,
+    //   )
+
+    //   const userValueWithDecimal = parseFloat(
+    //     pactAccountabilityPercentageValue.toFixed(1),
+    //   )
+    //   const calculatedValueWithDecimal = parseFloat(
+    //     (100.0 - pactAccountabilityPercentageValue).toFixed(1), // Ensure this is also a number
+    //   )
+
+    //   if (!walletClientLoading && walletClientData) {
+    //     dispatch({ type: 'WALLET_SIGNING' })
+
+    //     const splitsClient = new SplitsClient({
+    //       chainId: 421613,
+    //       publicClient: publicClient,
+    //       walletClient: walletClientData,
+    //     })
+
+    //     const splitArgs = {
+    //       recipients: [
+    //         {
+    //           address: wallet,
+    //           percentAllocation: userValueWithDecimal,
+    //         },
+    //         {
+    //           address: pactAddressValue,
+    //           percentAllocation: calculatedValueWithDecimal,
+    //         },
+    //       ],
+    //       distributorFeePercent: 0.0,
+    //     }
+    //     const response = await splitsClient.createSplit(splitArgs)
+    //     dispatch({ type: 'SPLIT_CREATING' })
+
+    //     if (response && response.event.transactionHash) {
+    //       dispatch({
+    //         type: 'TRANSACTION_COMPLETE',
+    //         txHash: response.event.transactionHash,
+    //       })
+    //       const txHash = response.event.transactionHash
+    //       const formData = new FormData(formElement) // get the form data from the form elemnt
+    //       if (txHash !== null) {
+    //         dispatch({
+    //           type: 'SENDING_TX_HASH',
+    //           txHash: txHash,
+    //         })
+    //         formData.append('txHash', txHash) // append the resolved txHash to the form data
+    //         const submission = await parse(formData, {
+    //           schema: (intent) =>
+    //             createSchema(intent, {
+    //               isTxHash(txHash) {
+    //                 return Promise.resolve(txHash !== null)
+    //               },
+    //             }),
+    //           async: true,
+    //         })
+    //         if (submission.error && Object.keys(submission.error).length > 0) {
+    //           setFormErrors(submission.error)
+    //           console.error('Validation errors:', submission.error)
+    //           console.log('errors', submission.error)
+    //         } else {
+    //           setSubmitting(true) // Set the submitting state to true
+    //           console.log('continuing to submit data')
+    //           fetcher.submit(formData, {
+    //             method: 'post',
+    //           })
+    //           setSubmitting(false)
+    //         }
+    //       }
+    //     }
+    //   }
+    // } catch (error) {
+    //   console.error(
+    //     'An error occurred during transaction or form handling:',
+    //     error,
+    //   )
+    // }
   }
 
   return (
@@ -395,11 +403,12 @@ export function CreatePactForm({
               Pact Address
             </Label>
             <Input {...conform.input(pactAddress)} />
-            {/* <span className="flex items-center text-xs font-medium tracking-wide text-red-500">
-              {pactAddress.error}
-            </span> */}
+
             {formErrors?.pactAddress?.map((message, index) => (
-              <div key={index} className="error">
+              <div
+                key={index}
+                className="flex items-center text-xs font-medium tracking-wide text-red-500"
+              >
                 {message}
               </div>
             ))}
@@ -418,11 +427,12 @@ export function CreatePactForm({
               Pact Accountability Percentage
             </Label>
             <Input {...conform.input(pactAccountabilityPercentage)} />
-            {/* <span className="flex items-center text-xs font-medium tracking-wide text-red-500">
-              {pactAccountabilityPercentage.error}
-            </span> */}
+
             {formErrors?.pactAccountabilityPercentage?.map((message, index) => (
-              <div key={index} className="error">
+              <div
+                key={index}
+                className="flex items-center text-xs font-medium tracking-wide text-red-500"
+              >
                 {message}
               </div>
             ))}
@@ -431,7 +441,7 @@ export function CreatePactForm({
             variant="outline"
             size="sm"
             className="block w-full"
-            // type="submit"
+            type="submit"
             disabled={isSubmitting}
             // disabled={
             //   state.status !== 'idle' && state.status !== 'transaction-complete'
